@@ -1,0 +1,209 @@
+---
+title: "The Colonial Origins of Comparative Development"
+subtitle: "Core Empirical Research Methods - Summer Work"
+author: "Toby Wang"
+date: "Aug 29, 2023"
+format: html
+geometry:
+  - top=30mm
+  - left=20mm
+  - heightrounded
+editor: visual
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(janitor)
+library(broom)
+library(car)
+library(ggplot2)
+library(modelsummary)
+library(gapminder)
+library(gridExtra)
+library(knitr)
+library(AER)
+```
+
+```{r}
+library(haven)
+dta <- read_dta("https://ditraglia.com/data/ajr.dta")
+head(dta)
+```
+
+## Q1
+
+### a.
+
+The key question that AJR try to answer is why some countries are much richer than others today. Specifically, they investigate the role that institutions play in determining the level of development of various countries and argue that the differences in institutions across countries are the fundamental cause of differences in economic development.
+
+### b.
+
+AJR's key theory is that the institutions in a society are a major determinant of economic development. They argue that societies that have "good" institutions - those that provide security of property rights and relatively equal access to economic opportunities - will have better economic performance than societies with "bad" institutions - those that do not provide these things. They also argue that the colonizers established different types of institutions in different colonies, which led to differences in economic development. Specifically, in places where the disease environment was not suitable for European settlement, colonizers set up extractive institutions, which did not provide secure property rights and did not encourage investment. In places where Europeans settled in large numbers, they set up institutions that were more conducive to investment and economic development.
+
+### c.
+
+*Exogeneity*: in this context this would mean that settler mortality rates are uncorrelated with any other factors that affect economic development other than through their effect on early institutions which affects later institutions, which includes them directly affecting economic performance (exclusion). This cannot be tested because we do now know what the error term is (as it could mean anything that causes economic development except institutions). AJR argue that this holds because the factors which caused settlers mortaility was determined by the disease (malaria and yellow fever) environment under which the settlers faced, which the locals have a built immunity for (till this day). Therefore these diseases are therefore unlikely to be the reason why many countries in Africa and Asia are very poor today.
+
+*Relavence*: The instrument they use is the mortality rates of settlers. The relevance assumption here would mean that settler mortality rates are correlated with the institutions that were established by the colonizers. This can be tested and AJR claims in their paper that mortality rates faced by the settlers more than 100 years ago explains over 25 percent of the variation in current institutions.
+
+## Q2: OLS Regression
+
+### a.
+
+```{r}
+ols <- lm(loggdp ~ risk, dta)
+```
+
+### b.
+
+```{r}
+tidy(ols) |>
+  knitr::kable(digits = 2, caption = "OLS")
+```
+
+### c.
+
+we cannot interpret these results causally because there may be variables, such as geographical location, which causes both `risk` and `loggdp`. The natural resource curse is a good illustration of this whereas it could both cause more extractive institutions, and higher gdp. Additionally, there may be reverse causation in that it may actually be `loggdp` causing better institutions in line with theories which state that a country would be more democratic and have better property rights once there is a growing middle class which wants their property more secure and protected.
+
+## Q3: IV Regression
+
+### a. First Stage
+
+```{r}
+first_stage <- lm(risk ~ logmort0, dta)
+first_stage |>
+  tidy()
+```
+
+There is a very significant relationship between settlers mortality rates and the risk of expropriation. Specifically, one percent change in settlers mortality rates is correalted with a .6 point reduction (out of 10) in how protected one's property is.
+
+### b. Reduced Form
+
+```{r}
+reduced_form <- lm(loggdp ~ logmort0, dta)
+reduced_form |>
+  tidy() |>
+  knitr::kable()
+```
+
+Again there is a statistically significant relationship between `logmort0` and `loggdp`, indicating that a 1 percent increase in settler mortality rates is associated with a 0.56 percent decrease in GDP.
+
+### c.
+
+```{r}
+iv <- AER::ivreg(loggdp ~ risk | logmort0, data = dta)
+```
+
+### d.
+
+```{r}
+iv_ols <- list(iv_reg = iv, ols_reg = ols)
+modelsummary(iv_ols, gof_omit = 'Log.Lik.|R2 Adj.|AIC|BIC|F', fmt = 2)
+```
+
+The IV regression gives a larger effect of a unit increase of risk (better institutions) on the percentage increase of gdp in 1995. This results strengthens AJR's argument that institutions matter in economic development, when holding other factors equal. They show this argument through this IV result which show that confounding variables (endogenous) bias the true causal result downwards.
+
+### e.
+
+Since we know that given that the instrument satisfies relevance, the exclusion restriction, and independence, the IV coefficient is the reduced form coefficient over the first stage coefficient, we have:
+
+```{r}
+iv_hand <- coef(reduced_form)[2] / coef(first_stage)[2]
+round(iv_hand, digits = 2)
+```
+
+This is the same result we got for the IV coefficient rounded to 2 decimal points.
+
+## Q4: 2 Criticisms of AJR
+
+### a.
+
+Putting claims 1 and 2 together we can argue that the instrument `logmort0` violates the exclusion restriction, which is included in the exogeneity assumption. Claim 2 states that settler mortality rates causes a country's disease environment today, and claim 1 states that the current disease environment determines GDP per capita. Taken together this questions if institutions is the only bridge between settlers moratality and GDP per capita.
+
+### b.
+
+This is because when we include malaria (today) as an additional regressor, we control for the current disease enviornment (or we pull it out from the error term in the causal model) when measuring the effect of institutions on GDP. By doing so claim 1 and 2 cannot hold because the current disease enviornment is no longer a part of the error term. Thus, if after controlling for malaria (current disease enviornment) we do not see a change in the IV results, this would mean that the claims (1 and 2) are invalid, and we do see a change in IV results, our IV estimates would be strengthened.
+
+### c. OLS with `malaria`
+
+```{r}
+ols_malaria <- lm(loggdp ~ risk + malaria, dta)
+ols_malaria |>
+  tidy() |>
+  knitr::kable()
+```
+
+We cannot interpret this causally because the error term of a causal model represents all other causes of `loggdp`, some of which may also cause institutions or malaria (for instance, geography). Additionally, GDP may also cause good or bad institutions. Simply controlling for malaria would not work for a causal interpretation. Also note that the magnitude on risk on GDP is smaller when controlling for malaria, indicating that `malaria` may have previously been a factor which explains both `risk` and `loggdp`.
+
+### d. First stage with `malaria`
+
+```{r}
+first_stage_malaria <- lm(risk ~ logmort0 + malaria, dta)
+first_stage_malaria |>
+  tidy() |>
+  knitr::kable()
+```
+
+This would seem to suggest that a 1 percent increase in mortality rate is associated with .43 point decrease in risk protection. Notice that the p value for `malaria` is 0.187, which does not pass the 95% test. Intuitively this makes sense if we want to make the case that `malaria` represents a separate causal path from settler mortality to GDP.
+
+### e. IV with `malaria`
+
+```{r}
+iv_malaria <- AER::ivreg(loggdp ~ risk + malaria | malaria + logmort0, data = dta)
+
+reg_malaria <- list(ols_malaria = ols_malaria, iv_malaria = iv_malaria, ols = ols, iv = iv)
+modelsummary(reg_malaria, fmt = 3, gof_omit = 'Log.Lik.|R2 Adj.|AIC|BIC|F')
+```
+
+Comparing `ols_malaria` and `iv_malaria`, we see that the IV estimate is indeed larger than the OLS estimate in magnitude in the effect of good institutions on good economic performance.
+
+### f.
+
+This criticism is valid in that it shows that, controlling for malaria, both the OLS and IV estimates for the effect of institutions have gone down. Therefore it shows that AJR's estimates are likely overblown. However, in both AJR's analysis and when we control for malaria, the iv estimates are consistently higher than the OLS estimates, which suggests that the fundamental logic of AJR's paper, that institutions matter, is still sound, with a caveat that controlling for malaria, the magnitude of this effect goes back to the original OLS level.
+
+## Q5: Jeffery Sachs Criticism of AJR
+
+### a.
+
+```{r}
+iv_geography <- AER::ivreg(loggdp ~ risk + malaria + latitude + rainmin + meantemp | malaria + latitude + rainmin + meantemp + logmort0, data = dta)
+
+ols_geography <- lm(loggdp ~ risk + malaria + latitude + rainmin + meantemp, dta)
+
+reg_malaria_geo <- list(iv_geography = iv_geography, ols_geography = ols_geography, ols_malaria = ols_malaria, iv_malaria = iv_malaria)
+
+modelsummary(reg_malaria_geo, fmt = 3, gof_omit = 'Log.Lik.|AIC|BIC|F')
+```
+
+### b.
+
+After controlling for the three geographical factors in our IV analysis, we find that nothing in the regression has significant results. However, if we discard settlers mortality as an IV and just run an OLS, none of the geographical explanations are while institutions and malaria are. This may be due to overfitting, whereas the more variables we add the larger that standard deviation would be, or it may say something more important about the instrument. Let's investigate further.
+
+On first sight, there may seem to be a connection between the settlers mortality rates and geography. This would be problematic because this would violate the independence assumption for the instrument `logmort0`, as Sachs is also claiming that geography is also a factor which GDP depends on. Let's first run some quick regressions
+
+Testing if mortality rates and geography are related
+
+```{r}
+geo_mort <- lm(logmort0 ~ latitude + meantemp + rainmin, dta)
+tidy(geo_mort)|>
+  knitr::kable()
+```
+
+Testing if gdp and geography are related
+
+```{r}
+tidy(lm(loggdp ~ latitude + meantemp + rainmin, dta)) |>
+  knitr::kable()
+```
+
+It seems as though latitude is quite weak, but `rainmin` and `meantemp` seems to have a strong correlation with both the instrument and the outcome variables. Stopping to think for a second, as someone who's experienced both the northern, dry parts of China and southern, humid parts of China, both temperature and rainfall are causes of mosquito infestations, which are the primary medium for malaria, which we use as a proxy for disease today. If we can prove that, controlling for disease, geography itself does not explain settlers mortality, then we can say that we have actually controlled for geography in the `malaria` control, and would not have to proxy for all the extra variables which are making our standard errors too big. Let's test for this
+
+```{r}
+geo_mort_malaria <- lm(logmort0 ~ latitude + meantemp + rainmin + malaria, dta)
+
+geo_mort_regs <- list(without_malaria = geo_mort, with_malaria = geo_mort_malaria)
+
+modelsummary(geo_mort_regs, fmt = 3, gof_omit = 'Log.Lik.|AIC|BIC|F')
+```
+
+As we can see, when we control for malaria, even though the three geography controls are still significant to some extent, none of them have any significant impact on explaining settlers mortality compared to before (especially with the latitude factor). We also see a jump in adj. R squared. Even though these results does not completely prove my point (`meantemp` and `rainmin` still have very small yet significant impact on settlers mortality controlling for malaria), it does call in to question the need to control for three new variables in the IV regression, which increases the standard error of each coefficient estiamte significantly and does not contribute massively to explaining the variance if most is already captured in the `malaria` variable (which we also controlled for in the IV regression).

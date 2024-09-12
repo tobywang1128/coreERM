@@ -1,0 +1,151 @@
+---
+title: "College Football Rankings and Market Efficiency"
+subtitle: "Core Empirical Research Methods - Summer Work"
+author: "Toby Wang"
+date: "Jul 23, 2023"
+format: html
+geometry:
+  - top=30mm
+  - left=20mm
+  - heightrounded
+editor: visual
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(janitor)
+library(broom)
+library(car)
+library(ggplot2)
+library(modelsummary)
+library(gapminder)
+library(gridExtra)
+library(knitr)
+```
+
+```{r}
+library(tidyverse)
+football <- read_csv('https://ditraglia.com/data/fair_football.csv')
+football
+```
+
+## Q1:
+
+```{r}
+home <- football |> 
+  filter(H == 1) |>
+  select(SPREAD)
+
+avg_spread <- mean(home[["SPREAD"]])
+win_rate <- sum(home > 0) / nrow(home) * 100
+
+c(win_rate, avg_spread)
+```
+
+The home team wins 81% of the time, and the home team scores on average 14.95 more points than their opponent.
+
+## Q2:
+
+```{r}
+reg_q2 <- lm(SPREAD ~ H - 1, football) 
+tidy(reg_q2)
+glance(reg_q2)
+```
+
+The p value is basically 0, which means that compared to a linear model along the x axis, having the term `H` most certainly minimizes MSE better than nothing. However, the adjusted R squared is 0.048, which means with the intercept at (0,0), only using `H` to predict `SPREAD` only explains 5 percent of it's variance. It does not make sense to include a constant in regression to predict spread because the numerical value of `SPREAD` is not meaningful as the teams are randomly chosen. `SPREAD` is only meaningful when its differences are compared given the change of an independent variable, as a proxy for performance.
+
+## Q3:
+
+```{r}
+library(GGally)
+football_rank <- football|>
+  select(-SPREAD, -H, -LV)
+ggpairs(football_rank)
+```
+
+The scattorplots below the diagonal of the matrix helps visualize the relationships between variables, the diagonal displays histograms for each variable, and above the diagonal displays the correlations between each 2 variables. We see that the different ranking systems are all highly correlated with one another, and are all basically centered around 0. This makes intuitive sense as the metric is a difference of rank, and that they are all constructed based on the team's `REC`.
+
+## Q4:
+
+```{r}
+reg_q4 <- lm(SPREAD ~ H + REC + MAT + SAG + BIL + COL + MAS + DUN - 1, football)
+tidy(reg_q4)
+glance(reg_q4)
+```
+
+`MAT`, `COL`, and `MAS` does not pass the 95% test, as their p-values are all larger than 0.05. This means that there is not enough evidence to reject the null hypothesis that the coefficient is equal to zero in these predictors. Now we drop these three predictors:
+
+```{r}
+reg_q4_2 <- lm(SPREAD ~ H + REC + SAG + DUN + BIL - 1, football)
+tidy(reg_q4_2)
+glance(reg_q4_2)
+```
+
+Dropping `BIL` and `REC`:
+
+```{r}
+reg_q4_3 <- lm(SPREAD ~ H + SAG + DUN - 1, football)
+tidy(reg_q4_3)
+glance(reg_q4_3) |> 
+  mutate(Row_Names = c("H + SAG + DUN")) |>
+  column_to_rownames(var = "Row_Names")
+```
+
+This seems to suggest that `SAG` and `DUN` provides new information outside of accounting for the home-advantage, and also that in the presence of `SAG` and `DUN`, the home-field advanateg still has additional predictive power in `SPREAD`. Now let's compare the adjusted R squared value of this regression with three parameters with the best of seven computer systems, which may be `SAG` or `DUN`. We test each one individually:
+
+```{r}
+reg_q4_4 <- lm(SPREAD ~ DUN - 1, football)
+reg_q4_5 <- lm(SPREAD ~ SAG - 1, football)
+rbind(tidy(reg_q4_4), tidy(reg_q4_5))
+rbind(glance(reg_q4_4), glance(reg_q4_5)) |>
+  mutate(Row_Names = c("DUN", "SAG")) |>
+  column_to_rownames(var = "Row_Names")
+```
+
+It turns out that neither of these have a larger adjusted r squared as large as the regression where we take into account `H` and combine these two predictors.
+
+## Q5:
+
+```{r}
+reg_q5 <- lm(SPREAD ~ LV + H + DUN + SAG - 1, football)
+tidy(reg_q5)
+glance(reg_q5)
+```
+
+Nope, when controlling for `LV`, no other ranking systems, or H contain additional predictive information beyond that contained in `LV`. As the p values in `H`, `DUN`, and `SAG` are all quite large, and so we cannot reject the null of it's coefficient being 0 when predicting `SPREAD` (has no additional predictive power).
+
+## Q6:
+
+The Efficient Market Hypothesis posits that betting (financial) markets are efficient in processing all relevant information, making it impossible to consistently outperform the market by using past or publically available information. The findings in the previous part has to do with market efficiency as there is no additional information that can predict game results better than the betting market, which is consistent with this theory.
+
+If bettering markets are efficient, the slope in a regression that uses `LV` alone to predict `SPREAD` should be one. As in this case the equilibrium betting spread would be the best predictor of the actual `SPREAD` which incorporates information from all other forms of available information (measured in this dataset). Let's run a regression and find its confidence interval.
+
+```{r}
+reg_q6 <- lm(SPREAD ~ LV - 1, football)
+tidy(reg_q6)
+glance(reg_q6)
+confint(reg_q6)
+```
+
+I cannot statistically reject the value of 1 as the true coefficient of `LV` as there is a 95% chance that the CI of the regression contains the true population parameter (1), using only `LV` predicting `SPREAD`. Accuracy wise: the adjusted R squared is about 0.46, which means `LV` alone explains about 46 percent of the variance in `SPREAD`, this means `LV` explains a large portion in the variability in spread.
+
+```{r}
+predictions <- predict(reg_q6)
+actual_values <- football$SPREAD
+rmse <- sqrt(mean((actual_values - predictions)^2))
+print(paste("RMSE of LV:", rmse))
+
+predictions_5 <- predict(reg_q5)
+actual_values_5 <- football$SPREAD
+rmse_5 <- sqrt(mean((actual_values_5 - predictions_5)^2))
+print(paste("RMSE of best reg w/o/ LV:", rmse_5))
+```
+
+Calculating the RMSE of using only `LV` and using `H` plus the other two useful predictors, we find that the RMSE of only `LV` is slightly smaller than the regression from the previous regression in part 5. Combine this with with a higher adjusted R squared, it suggests that only using `LV` is both more accurate and could explain more of the data in `SPREAD` than using the best combination of the other predictors.
+
+## Q7:
+
+```{r}
+comb_reg <- list(reg_q2, reg_q4, reg_q4_2, reg_q4_3, reg_q4_4, reg_q4_5, reg_q5, reg_q6)
+modelsummary(comb_reg, gof_omit = 'Log.Lik|AIC|BIC|F', fmt = 2)
+```

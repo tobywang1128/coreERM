@@ -1,0 +1,237 @@
+---
+title: "Bias in the Labor Market"
+subtitle: "Core Empirical Research Methods - Summer Work"
+author: "Toby Wang"
+date: "Jul 12, 2023"
+format: html
+geometry:
+  - top=30mm
+  - left=20mm
+  - heightrounded
+editor: visual
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(janitor)
+library(broom)
+library(car)
+library(ggplot2)
+library(modelsummary)
+library(gapminder)
+```
+
+```{r}
+bm <- read_csv('https://ditraglia.com/data/lakisha_aer.csv')
+```
+
+## Q1
+
+The research question that the researchers are trying to answer is whether if being black compared to being white alone, irrespective of socioeconomic, education, experience, and other factors, affects hiring decisions. The authors use a RCT that randomly assigns white-sounding and black-sounding names to resumes and send them to newspaper hiring advertisements. The authors find that not only is there a 50-percent gap in callback between a white-sounding and black-sounding name, high-quality resumes compared to low-quality ones have a statistically significant difference in callback rates between white and black applicants. This suggests that the gap between Whites and African Americans widens with resume quality. These observed results do not vary across different sectors.
+
+## Q2
+
+### a)
+
+Display the tibble bm. How many rows and columns does it have?
+
+```{r}
+head(bm)
+nrow(bm)
+ncol(bm)
+```
+
+We see from these commands that the tibble has 4870 rows and 65 columns
+
+### b)
+
+Display only the columns *sex*, *race* and *firstname* of *bm*. What information do these columns contain? How are *sex* and *race* encoded?
+
+```{r}
+bm |>
+  select(sex, race, firstname) 
+```
+
+This tibble contains the sex, race of the individual corresponding to their first name. *sex* is encoded as **m** for male and **f** for female. *race* is encoded as **w** for white and **b** for black.
+
+### c) Add two new columns to bm: female should take the value TRUE if sex is female, and black should take value TRUE if race is black.
+
+To do this we need to create logic vectors and test (iterate) through the sex and race columns to determine if each other them are female or black. Then we use *mutate()* to add the two columns in the tibble.
+
+```{r}
+sex_f <- bm[["sex"]] == "f"
+race_b <- bm[["race"]] == "b"
+
+bm |>
+  select(sex, race, firstname)|>
+  mutate(sex_f, race_b)
+```
+
+## Q3
+
+### a)
+
+How did the experimenters create their bank of resumes for the experiment?
+
+The experimenters started with resumes of actual job searchers but alter them sufficiently to create distinct resumes. The actual job resumes were taken from two job search websites that posts resumes of applicants seeking jobs in Boston and Chicago, with some further occupational and application time constraints.
+
+### b)
+
+The experimenters classified the resumes into two groups. What were they and how did they make the classification?
+
+The two groups were: high quality and low quality applicants. The distinction is based on criteria such as labor market experience, career profile, existence of gaps in employment, ans skills listed. Additionally, the researchers also added to the high quality applicants a subset of features such as: pre-employment experience, volunteering experience, extra skills, honors, or military service.
+
+### c)
+
+How did the experimenters generate identities for their fictitious job applicants?
+
+The experimenters used name frequency data calculated from birth certificates of all babies born in Massachusetts between 1974 and 1979. They then tabulate the data by race to determine which names are distinctively White and African American, then they use the most instinctive, highest frequency names of both races on the resumes.
+
+## Q4
+
+### a)
+
+Is sex balanced across race?
+
+We can first use the *group_by* function to sort the tibble by race then sum the number of females in each race bracket via the variable we created in the first part of the sheet *sex_f*. Summing the logicals treates each TRUE as a 1 and FALSE as 0.
+
+```{r}
+bm |>
+  group_by(race)|>
+  summarize(sum_of_f = sum(sex_f))
+```
+
+We find that the number of males and females are the same across the two racial groups, which means that sex is balanced across race.
+
+### b)
+
+Are computer skills balanced across race?
+
+To calculate proportion we just take the average across the two groups:
+
+```{r}
+bm |>
+  group_by(race)|>
+  summarize(prop_comp = mean(computerskills))
+```
+
+This shows that the white group has a bit less than the black group, but it is probably not significant as it is a difference of 3% across groups.
+
+### c)
+
+Are *education* and *ofjobs* balanced across race?
+
+```{r}
+bm |>
+  group_by(race)|>
+  summarize(prop_educ = mean(education), prop_ofjobs = mean(ofjobs))
+```
+
+Yes, they are.
+
+### d)
+
+Compute the mean and standard deviation of *yearsexp* by race. Comment on your findings.
+
+```{r}
+bm |>
+  group_by(race)|>
+  summarize(mean_yearsexp = mean(yearsexp), sd_yearsexp = sd(yearsexp))
+```
+
+This means that not only is mean of years of experience across races the same, but that also the distribution of years of experience around the mean has the same variability, such that we know it is not the case that more individuals the black group have experiences close to the mean of 7.8 years than the white group, and vice versa.
+
+### e) Why do we care if *sex*, *education*, *ofjobs*, *computerskills*, and *yearsexp* are balanced across race?
+
+We care because if they are not balanced, then any differences in outcomes (callbacks) may be due to these factors, and not factors directly related to race itself. These variables listed are proxys for if randomization process has eliminated differences in all unobserved factors which may influence the outcome variable. In other words we are testing for the orthogonality condition to hold between the error term and the treatment variable in a casual model.
+
+### f)
+
+Is *computerskills* balanced across *sex*? What about *education*? What's going on here? Is it a problem?
+
+```{r}
+bm |>
+  group_by(sex)|>
+  summarize(mean_computerskills = mean(computerskills),
+            mean_education = mean(education))
+```
+
+As we can see, it seems as though females have higher computer skills and low education on average. To investigate why this is: we first see that in section II C of the paper the experimenters use male and female names for sales jobs but nearly exclusively female names for administrative jobs to increase callback rates. To verify this I choose *secretary*, *supervisor*, and *offsupport* as three proxies for adminstrative jobs present in the dataset.
+
+```{r}
+bm |>
+  group_by(sex)|>
+  summarize(sum(secretary), sum(supervisor), sum(offsupport))
+```
+
+Indeed, we find that for each of these variables there is no men included but exclusively female. Let's then investigate the *computerskills* and *education* for each of these jobs, compared to the rest of the sample (all other jobs).
+
+```{r}
+bm |>
+  group_by(secretary)|>
+  summarize(mean(computerskills), mean(education))
+
+bm |>
+  group_by(supervisor)|>
+  summarize(mean(computerskills), mean(education))
+
+bm |>
+  group_by(offsupport)|>
+  summarize(mean(computerskills), mean(education))
+```
+
+We find that indeed, those who get these jobs have on average higher computer efficiency and lower education. Since the people who go for these jobs are majority women, this would explain this phenomena of unbalanced *computerskills* and *education* across *sex*. This is not a problem because we only need the other variables to be balanced when divided into race. In other words, we only need all other variables to be orthogonal with the treatment, which in this case is race, not sex. We have verified this type of balancedness (across races) in the previous parts.
+
+## Q5
+
+### a)
+
+Calculate the average callback rate for all resumes in *bm*.
+
+```{r}
+mean(bm[["call"]]) * 100
+```
+
+This corresponds to the 8.05 percent callback rate in the table.
+
+### b)
+
+Calculate the average callback rates separately for resumes with "white-sounding" and "black-sounding" names. What do your results suggest?
+
+```{r}
+bm |>
+  group_by(race)|>
+  summarize(mean(call))
+```
+
+These results corresponds to the results in the first row of table 1 in the paper, and suggests that controlling for all other factors, having a white-sounding name results in a 3% increase in callback likelihood than a black-sounding one.
+
+### c)
+
+Repeat part 2, but calculate the average rates for each combination of race and sex. What do your results suggest?
+
+```{r}
+bm |>
+  group_by(race, sex)|>
+  summarize(mean(call))
+```
+
+The results again align with the table, and seem to suggest that females on average get more callbacks than males. However, this cannot be interpreted the same way that race could causally because sex is not randomly assigned: there are some jobs where the majority of applications (that the researchers choose) were female, which means that it is not random assignment.
+
+## Q6
+
+### Test the null hypothesis that there is no difference in callback rates across black and white-sounding names against the two-sided alternative. Comment on your results.
+
+```{r}
+black_callback <- pull(filter(bm, race == "b"), call)
+white_callback <- pull(filter(bm, race == "w"), call)
+t.test(black_callback, white_callback, alternative = "two.sided")
+```
+
+Therefore, since our hypothesis is that:
+
+-   Null Hypothesis: There is no difference in means between black and white-sounding names.
+
+-   Alternative Hypothesis: The true difference in means is not equal to 0.
+
+these results suggest that there is a statistically significant difference in callback rates between black and white-sounding names, with white-sounding names having a higher mean callback rate than black-sounding names. In particular, there is a substantial difference between the mean of the two groups, with a p-value well below the conventional significance level of 0.05.

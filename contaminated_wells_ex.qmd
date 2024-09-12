@@ -1,0 +1,368 @@
+---
+title: "Comtaminated Wells in Bangladesh"
+subtitle: "Core Empirical Research Methods - Summer Work"
+author: "Toby Wang"
+date: "Aug 14, 2023"
+format: html
+geometry:
+  - top=30mm
+  - left=20mm
+  - heightrounded
+editor: visual
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(janitor)
+library(broom)
+library(car)
+library(ggplot2)
+library(modelsummary)
+library(gapminder)
+library(gridExtra)
+library(knitr)
+library(glue)
+```
+
+## Q1: Preliminarites
+
+### a)
+
+```{r}
+data_url <- 'https://ditraglia.com/data/wells.csv'
+wells <- read_csv(data_url)
+head(wells)
+```
+
+### b)
+
+```{r}
+wells <- wells |>
+  mutate(larsenic = log(arsenic))
+```
+
+### c)
+
+```{r}
+p1 <- wells |>
+  mutate(larsenic = log(arsenic)) |>
+  ggplot(aes(x = arsenic)) +
+  geom_histogram()
+
+p2 <- wells |>
+  mutate(larsenic = log(arsenic)) |>
+  ggplot(aes(x = larsenic)) +
+  geom_histogram()
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Most households have arsenic levels close to 0, and very few have levels greater than 5. Therefore when we take the log of these values most will fall between negative infinity (those that are close to 0) to 1 (approx.), below is a natural log plot to better visualize this relationship
+
+```{r}
+x <- seq(0, 10, by = 0.01)
+y <- log(x)
+data.frame(x,y) |>
+  ggplot(aes(x = x, y = y)) +
+  geom_line() +
+  geom_abline(intercept = log(2.5), slope = 0, color = "blue")
+```
+
+### d)
+
+```{r}
+wells <- wells |>
+  mutate(dist100 = dist/100)
+```
+
+### e)
+
+```{r}
+wells <- wells |>
+  mutate(zeduc = (educ - mean(educ)) / sd(educ) )
+```
+
+## Q2: First Regression: `fit1`
+
+### a)
+
+```{r}
+fit1 <- glm(switch ~ dist100, family = binomial(link = 'logit'), wells)
+modelsummary(fit1)
+```
+
+### b)
+
+```{r}
+wells |>
+  ggplot(aes(x = dist100, y = switch)) +
+  stat_smooth(method = 'glm', method.args = list(family = "binomial"), formula = y ~ x) +
+  geom_jitter(width = 0.1, height = 0.01) + 
+  xlab("distance to nearest clean well / 100 m") +
+  ylab("predicted probability for switching")
+```
+
+### c)
+
+From the first two parts we see that there is a small but significant relationship between the distance (a 100m increase in distance to a clean well will decrease the log odds by approx. 0.6). This would make sense since we would assume that, given that the households know if their nearest well is contaminated or not, that they would be less inclined to move if the nearest clean well is far.
+
+### d)
+
+```{r}
+mean_dist <- wells |>
+  select(dist100) |>
+  summarize(dist100 = mean(dist100))
+
+prob_avg <- predict(fit1, mean_dist, type = 'response')
+prob_avg
+```
+
+For the average household (in terms of distance to the nearest safe well), the probability of switching is approx .57
+
+### e)
+
+First let us calculate the marginal effect from taking the derivative of $P(Y = 1 | X)$
+
+\[ \begin{align}
+\frac{\partial p(x)}{\partial x} &= \beta_1 \frac{e^{\beta_0 + \beta_1 X}}{(1 + e^{\beta_0 + \beta_1 X})^2} \\ 
+&= \beta_1 \frac{e^{\beta_0 + \beta_1 X}}{1 + e^{\beta_0 + \beta_1 X}} \frac{1}{1 + e^{\beta_0 + \beta_1 X}} \\ 
+& = \beta_1 P(Y = 1) (1-P(Y = 1))
+\end{align} \]
+
+Now we calcualte this: by using the result from the previous question `prob_avg` which represent $P(Y = 1)$:
+
+```{r}
+marginal_avg <- as.numeric(coef(fit1)[2] * prob_avg * (1 - prob_avg))
+marginal_avg
+```
+
+This figure suggests that for the person which corresponds to the average distance towards the nearest clean well, the regression would predict that if they live 100 meters further, we would predict a 0.15 decrease in the probability of moving. Now let's find the "divide by 4" and average partial effect
+
+```{r}
+div4 <- as.numeric(coef(fit1)[2]/4)
+
+avg_partial <- mean(coef(fit1)[2] * predict(fit1, type = 'response') * (1 - predict(fit1, type = 'response')))
+
+data.frame(divide_by_4 = div4, avg_partial, marginal_at_mean = marginal_avg)
+```
+
+The marginal effect of the average household is sandwiched between the average partial effect and the "divide by 4" value. This suggests that the effect of the independent variable on the probability of the event occurring at the average values of the predictors is less than the maximum possible effect (as given by the "divide by 4" rule). Additionally, on average, the effect of the independent variable on the probability of the event occurring is less than its effect at the average values of the predictors.
+
+## Q3: Predictive performance of `fit1`
+
+### a)
+
+```{r}
+wells <- wells |>
+  mutate(p1 = predict(fit1, type = 'response')) |>
+  select(p1, dist100, everything())
+```
+
+### b)
+
+```{r}
+wells <- wells |> 
+  mutate(pred1 = ifelse(p1 > 0.5, 1, 0)) |>
+  select(pred1, everything())
+```
+
+**I am going to assume to use the bayes classifer rule for constructing the pred1** \## c)
+
+```{r}
+error_fit1 <- wells |> 
+  summarize(error_rate = mean(pred1 - switch))
+error_fit1
+```
+
+This means that `pred1` overestimates the switch rate for approx. 30 percent of the data.
+
+### d)
+
+```{r}
+true_positive <- sum(as.numeric(wells$pred1 == 1 & wells$switch == 1))
+true_negative <- sum(as.numeric(wells$pred1 == 0 & wells$switch == 0))
+false_positive <- sum(as.numeric(wells$pred1 == 1 & wells$switch == 0))
+# your website has a typo when explaining what this one was
+false_negative <- sum(as.numeric(wells$pred1 == 0 & wells$switch == 1))
+conf_mat <- table(1:2, 1:2)
+conf_mat[1,1] <- true_negative
+conf_mat[2,2] <- true_positive
+conf_mat[1,2] <- false_negative
+conf_mat[2,1] <- false_positive
+conf_mat
+
+# I later found out that there is an easier way to do this... 
+conf_mat1 <- table(wells$pred1, wells$switch)
+```
+
+### e)
+
+```{r}
+sens_fit1 <- conf_mat1[2,2] / (conf_mat1[2,2] + conf_mat1[1,2])
+spes_fit1 <- conf_mat1[1,1] / (conf_mat1[1,1] + conf_mat1[2,1])
+data.frame(cbind(sens_fit1, spes_fit1))
+```
+
+### f)
+
+The results in the previous part makes intuitive sense because we found in part c) that `pred1` overestimates the switch rate for approx. 30 percent of the data. This means that `pred1` should systematically pick up true values well but false values poorly.
+
+```{r}
+wells |>
+  summarize(mean(switch))
+```
+
+This would mean that the null model predicts a 100 percent switch rate, let's use this to calculate the error rate (we don't need to calcualte the sensitivity and specificity because they would be 100 percnet and 0 percent respectively)
+
+```{r}
+wells |>
+  summarize(error_rate_null = 1 - mean(switch))
+```
+
+The null model overclassifies approx. 42 percent of the data, which means that the null model performs worse than `fit1` (or in other words, including `dist100` is better at predicting the outcome of `switch` than not including it).
+
+## Q4: Additional regressions: `fit2`, `fit3`, and `fit4`
+
+### a)
+
+```{r}
+fit2 <- glm(switch ~ larsenic, family = binomial(link='logit'), wells)
+```
+
+### b)
+
+```{r}
+fit3 <- glm(switch ~ zeduc, family = binomial(link = 'logit'), wells)
+```
+
+### c)
+
+```{r}
+fit4 <- glm(switch ~ dist100 + larsenic + zeduc, family = binomial(link = 'logit'), wells)
+```
+
+### d)
+
+```{r}
+well_regs <- list(fit1, fit2, fit3, fit4)
+modelsummary(well_regs, fmt = 2, 
+             title = "Regression results for wells dataset")
+```
+
+## Q5: Interpreting `fit2`, `fit3`, `fit4`
+
+### a)
+
+```{r}
+wells |>
+  ggplot(aes(x = larsenic, y = switch)) +
+  geom_smooth(method = 'glm', method.args = list(family = "binomial")) +
+  geom_jitter(width = 0.5, height = 0.07)
+```
+
+There is a statistically significant and positive relationship between the log arsenic levels and switch rate. The sign makes intuitive sense because the higher the arsenic levels, the odds of switching should increase.
+
+### b)
+
+```{r}
+wells |>
+  ggplot(aes(x = zeduc, y = switch)) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"))+
+  geom_jitter(width = 0.5, height = 0.1)
+```
+
+It seems as if even though there is a statistically significant relationship between the the change of 1 standard deviation of education and the log odds of switching, although the magnitude of this effect is quite small. The sign of its coefficient is positive which may be because: people who have had more education on average is more aware of the long-term negative health effects of contaminated wells. However, it is good to note that this is an average effect and there are many people in the dataset who have 1 standard deviation less than the average education, who do switch to a healthier well.
+
+### c)
+
+```{r}
+fit4_mean <- wells |>
+  select(dist100, larsenic, zeduc) |>
+  summarize(dist100_mean = mean(dist100), 
+            larsenic_mean = mean(larsenic), 
+            zeduc_mean = mean(zeduc)) |>
+  mutate(predic_mean = predict(fit4, data.frame(dist100 = dist100_mean, larsenic = larsenic_mean, zeduc = zeduc_mean), type = "response"))
+
+marg_dist <- coef(fit4)[2] * fit4_mean$predic_mean * (1 - fit4_mean$predic_mean)
+marg_larsenic <- coef(fit4)[3] * fit4_mean$predic_mean * (1 - fit4_mean$predic_mean)
+marg_zeduc <- coef(fit4)[4] * fit4_mean$predic_mean * (1 - fit4_mean$predic_mean)
+marg_fit4 <- cbind(marg_dist, marg_larsenic, marg_zeduc)
+rownames(marg_fit4) <- "marg_effect_fit4"
+
+div_dist <- coef(fit4)[2] / 4
+div_larsenic <- coef(fit4)[3] / 4
+div_zeduc <- coef(fit4)[4] / 4
+div4_fit4 <- cbind(div_dist, div_larsenic, div_zeduc)
+rownames(div4_fit4) <- "div4_fit4"
+
+data.frame(rbind(marg_fit4, div4_fit4))
+```
+
+It seems that distance to the well has a slightly larger impact on the probability of switching than the log arsenic levels for someone who has the mean value of all three predictors. The level of education (number of sd from the mean) compared to the other two predictors has minimal impact on the probability of switching, according to this regression. The divide by four rules gives larger marginal effective (by magnitude) than the three marginal effects for the average household.
+
+## Q6: Predictive performance of `fit4`
+
+### a)
+
+#### a)
+
+```{r}
+wells <- wells |>
+  mutate(p4 = predict(fit4, type = 'response')) |>
+  select(p4, dist100, everything())
+```
+
+#### b)
+
+```{r}
+wells <- wells |> 
+  mutate(pred4 = ifelse(p4 > 0.5, 1, 0)) |>
+  select(pred4, everything())
+```
+
+**I am going to assume to use the bayes classifer rule for constructing the pred1** \### c)
+
+```{r}
+error_fit4 <- wells |> 
+  summarize(error_rate = mean(pred4 - switch))
+error_fit4
+```
+
+This means that `pred1` overestimates the switch rate for approx. 30 percent of the data.
+
+#### d)
+
+```{r}
+conf_mat2 <- table(wells$pred4, wells$switch)
+conf_mat2
+```
+
+#### e)
+
+```{r}
+sens_fit4 <- conf_mat2[2,2] / (conf_mat2[2,2] + conf_mat2[1,2])
+spes_fit4 <- conf_mat2[1,1] / (conf_mat2[1,1] + conf_mat2[2,1])
+data.frame(cbind(sens_fit4, spes_fit4))
+```
+
+#### f)
+
+```{r}
+wells |>
+  summarize(mean(switch))
+```
+
+This regression has a significant reduction or error compared to the null model, as compared to the null model of everyone switching it has much better spesificity.
+
+### b)
+
+```{r}
+fit4_performance <- data.frame(cbind(sens = sens_fit4, spes = spes_fit4, error_rate = error_fit4))
+rownames(fit4_performance) <- "fit4_perf"
+
+fit1_performance <- data.frame(cbind(sens = sens_fit1, spes = spes_fit1, error_rate = error_fit1))
+rownames(fit1_performance) <- "fit1_perf"
+rbind(fit1_performance, fit4_performance)
+```
+
+As we can see form this tibble, `fit1` has very high sensitivity with very low specificity, while `fit4` has lower sensitivity but much better specificity and a lower error rate. This suggests that `fit4` is better than `fit1` at correctly predicting cases where a household does not switch to a clean well. This improvement also outweighs its lack of predictive power when it comes to correctly predicting a household switching when it actually does switch, as it has a overall lower error rate (which both sensitivity and specificity contributes towards).

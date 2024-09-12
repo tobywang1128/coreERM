@@ -8,7 +8,14 @@ website:
     left:
       - href: index.qmd
         text: Home
+      - colonial_origins_ex.qmd
+      - contaminated_wells_ex.qmd
+      - filedraw_ex.qmd
       - projects.qmd
+      - monte_carlo_ex.qmd
+      - football_markets_ex.qmd
+      - optimal_stop_ex.qmd
+      - Lumberjack.qmd
     tools:
       - icon: twitter
         href: https://twitter.com/

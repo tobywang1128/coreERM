@@ -3,17 +3,15 @@ title: "About Me"
 about:
   id: me
   template: broadside
-  image: img/profile.png
+  image: img/gradpic.png
 ---
 
 :::{#me}
 
-## Goals
+## About me
 
-## Education
-
-## Experience
+Hello! My name is Toby and I am a recent graduate of the University of Oxford where I studies Philosophy, Politics, and Economics (PPE). Currently, I am a masters student at Yale University's School of Management studying for a Masters in Asset Management, a program created by PMs at AQR Capital and David Swenson, the ex Chief Investment Officer of the Yale Endowment. This website is meant to show my writing, both academic and non-academic, as well as the various data projects I am excited to share with the world! Stay tuned for updates to come!
 
 :::
 
-Thanks for checking out my web site!
+Thanks for checking out my Website!

@@ -1,0 +1,289 @@
+---
+title: "Lumberjack's Simulation"
+subtitle: "A PPE student performing simulation studies to procrastinate"
+author: "Toby Wang"
+date: "Aug 1, 2023"
+format: html
+geometry:
+  - top=30mm
+  - left=20mm
+  - heightrounded
+editor: visual
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+library(janitor)
+library(broom)
+library(car)
+library(ggplot2)
+library(modelsummary)
+library(gapminder)
+library(gridExtra)
+library(dplyr)
+library(caret)
+```
+
+# Background:
+
+I recently took up an interest in potentially working as a quant. So naturally I began to watch other people doing quant interviews on YouTube. The thinking is that if I can beat them to solving the problem, then I (a lousy PPEist) probably have a chance at a career as a quant trader or something, right? So one day after work I sat down and started watching a Jane Street "mock interview" conducted by two employees, one asks the other:
+
+"A lumberjack cuts a piece of wood of 1 meter in length at 2 uniformly randomly selected locations along the length of the wood. Find the probably the shortest piece of wood is at most 5 centimeters."
+
+The interviewee was able to derive the solution within minutes. I watched in horror at the speed in which (who I assume is) the quant-trader was able to derive the solution. I was finished, I thought.
+
+But wait... I've recently learned how to run simulations through an R course I audited with my economics professor. Maybe I could simulate this question to get the right answer.
+
+After hesitating on whether this is really the best way to spend my evening, I opened RStudio.
+
+# Objectives
+
+Conceptually what do we need to accomplish here? I listed some bullet points for myself...
+
+1.  We need to somehow figure out a way to randomly sample three numbers that add up to 1
+2.  We need to then come up with a way to get lots and lots of these samples so that the Law of Large Numbers can kick in
+3.  We finally need to select the smallest out of the three numbers in each sample, and calculate the proportion of them that are smaller to this 0.05 meter threshold
+
+# Implementation
+
+## Simulation #1
+
+Okay so what if we take two random draws from a standard normal uniform distribution (a distribution that spits out random numbers from 0 to 1 with equal probability) and then check if their sum is larger or smaller than 1. If they are larger than 1 we discard them, and if they are smaller than 1 then that makes a valid sample!
+
+```{r}
+set.seed(69)
+num_simulations <- 1e5
+lumber_sim <- \(num_simulations = 1e5) {
+  count <- 0
+  result_vec <- numeric(num_simulations)
+  while(count < num_simulations){
+    locations <- runif(2)
+    if(sum(locations) < 1) {
+    result <- tail(sort(c(locations, 1 - sum(locations)), decreasing = TRUE), 1)
+    count <- count + 1
+    result_vec[count] <- result
+      }
+  }
+  return(sum(result_vec <= 0.05) / num_simulations)
+}
+
+lumber_sim()
+```
+
+And there we have it! If only I can bring a computer with me to a quant interview... Anyway, at this point I've already spent an embarrassing amount of time on this "mock interview question", but my curiosity pushed me to keep procrastinating. How would this percentile change if I had to cut the 1 meter log into more and more pieces? This seems like a harder question that seems impossible for the entry level quant analyst to derive. Solving this question would surely boost my ego. So I started thinking...
+
+## Simulation #2: Back to the Drawing Board
+
+At this point I'm having second doubts about my original strategy. As the number of cuts on the 1 meter log increases, the probability that the sum of a bunch of uniform distributions surpassing one will increase as well. So say that I break the plank down to 100 bits: there's no way it is a good idea to simulate this by taking random draws from the uniform distribution 99 times and testing if their sum is greater than one (that would also probably take too long). Is there another way?
+
+Suddenly a thought came to me: what if, to select the three values, we somehow drew twice and used their difference. Okay this could work I'm pretty sure, we just have to construct this difference term in a way such that in combination with the two other terms it adds to 1, per the questions request. So suppose we drew two values \$a,b \sim \text{Unif}(0,1) \$ and then took their difference $b-a$. The other two values would obviously be $a$ and $1-b$ since these two values are both smaller than 1 and the three sum to one. One thing to be careful though, we somehow have to order $a$ and $b$ to make sure $b>a$ so that $b-a >0$. If we get this simplified model down we can then (and if the simulated proportion match with the value from the simulation above), scaling this model should be easier.
+
+```{r}
+cut_log_randomly <- function() {
+  # Generate two random points between 0 and 1
+  cuts <- sort(runif(2))
+  
+  # Calculate the lengths of the three pieces
+  piece1 <- cuts[1]
+  piece2 <- cuts[2] - cuts[1]
+  piece3 <- 1 - cuts[2]
+  
+  # Return the lengths of the three pieces
+  a <- tail(sort(c(piece1, piece2, piece3), decreasing = TRUE), 1)
+  return(a)
+}
+
+result <- cut_log_randomly()
+res_vec <- map(1:num_simulations, \(i) cut_log_randomly())
+sum(res_vec <= 0.05) / num_simulations
+```
+
+Cool, the two values match up which means we're in the good! Now time to generalize (oof...)
+
+## Simulation 3: Scaling
+
+First lets try to write a function, aiming to achieve two things:
+
+1.  Given an input of the number of wood chunks it spits out some randomly generated length that add up to 1
+2.  Also out of these chunks if it also gave us just the smallest one, that would be useful the future
+
+The idea is that to scale the previous simulation we first generate a bunch of uniform(0,1) draws and then order them from smallest to largest. Then we can subtract the `i+1` by the `i`th term and 1 by the last term. Let's implement this strategy.
+
+```{r}
+cut_log_randomly_n_pieces <- function(n) {
+  if (n <= 1) {
+    stop("Number of pieces should be greater than 1.")
+  }
+  
+  # Generate n-1 random points between 0 and 1
+  cuts <- sort(runif(n - 1))
+  
+  # Calculate the lengths of the n pieces
+  differences <- diff(cuts)
+  if (n > 2) {
+  names_diff <- setNames(differences, c(paste0("len_", 2:(length(cuts))))) }
+  else {names_diff <- differences}
+  final_value <- 1 - cuts[length(cuts)]
+  name_n <- setNames(final_value, c(paste0("len_", n)))
+  lengths <- c("len_1" = cuts[1], names_diff, name_n)
+  smallest <- tail(sort(lengths, decreasing = TRUE), 1)
+  # Return the lengths of smallest
+  return(list(smallest = smallest, lengths = lengths))
+}
+
+cut_log_randomly_n_pieces(3)
+```
+
+So after a few attempts I got this to work. What was especially difficult was that when we want two parts of the wood the middle term `c(paste0("len", 2:length(cuts))))` in the `name_diff` line would try to give a third name, so the length of the name vector and actual vector did not line up. This was a royal pain in the posterior to find and take care of. Other than that it was smooth sailing.
+
+At this point though I was worried: intuitively it seems that this way of making random wooden chunks off the 1 meter wooden plank isn't random enough. What if some chunks are systematically larger than others? Is this really a good way to break the wood up into chunks? So I double checked.
+
+```{r}
+sims <- 1e4
+sim_draws <- map_dfr(1:sims, \(i) cut_log_randomly_n_pieces(5)[[2]])
+sim_draws|>
+  summarize(across(everything(), mean, .names = '{.col}_mean'))
+```
+
+Phew... Turns out that (at least if we want five chunks) if we repeated this simulation a bunch of times then each part appraches 1/5. This is a good sign as it shows that we are not systematcally making one chunk smaller or larger than the rest, which would destroy the internal validity of our results later. Cool: marching onward. First let's try the probably the shortest piece of wood is at most 5 centimeters when the wooden plank is divided into 5 instead of three parts. Let's also make this a function.
+
+```{r}
+mappings <- map(1:sims, \(i) cut_log_randomly_n_pieces(5)[[1]])
+percentage <- sum(mappings <= 0.05) / sims
+percentage
+```
+
+Fantastic! now we can say with confidence that at this point, if the interviewer of Jane Street gave me a slightly modified version fo this question, I could secretly consult my program to beat the quant trader. Victory and dominance is mine at last. I have became what, as Jordan Peterson put it, a "high serotonin lobster".
+
+## Simulation #5:
+
+Now let's combine everything from above and write a function that spits out the solution directly given the nuber of simulations we want to run and the how many chuncks we want to plank to be split into:
+
+```{r}
+percentage_func <- \(sims_func = 1000, n_func){
+  map <- map(1:sims_func, \(i) cut_log_randomly_n_pieces(n_func)[[1]])
+  perc <- sum(map <= 0.05) / sims_func
+  setNames(perc, "percentage_below_0.05")
+}
+
+percentage_func(10000,3)
+```
+
+## Simulations within simulations (just like inception)
+
+Finally, it'll be cool if we can make a chart where if we specify the range of planks, then we get a table with the solutions of the question. This requires a map within a map (or a while loop within a while loop). Let's give it some parameters `n_vary` and `sims_func_final` and create such a chat using `dplyr`
+
+```{r}
+n_vary <- 15
+sims_func_final <- 1000
+
+final <- 2:n_vary
+data_points <- final |>
+  map_dfr(\(x) percentage_func(sims_func = sims_func_final, x)) |>
+  mutate(num_n = 2:n_vary)
+
+data_points
+```
+
+# Data Visualization
+
+Now is the time to make a lil graph of what this looks like, and maybe we can fit a model to see how the solution to this problem behaves when the number of wooden planks we divide up increases? Let's make a graph first:
+
+```{r}
+data_points |>
+  ggplot(aes(y = percentage_below_0.05, x = final)) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  geom_smooth(method = 'lm', se = FALSE) +
+  labs(title = 'Simulation Results - Cutting Wood',
+       caption = '**simulated n cuts (n+1 wooden parts that add up to 1)') + 
+  xlab('Number of peices of wood') +
+  ylab('Probability that the shortest peice is below 0.05')
+```
+
+The curve looks like it is seriously overfitting the data (as `geom_smooth()` typically does). But the relationship does look more logrithmic than linear, so let's try that and see what the RMSE (which takes care of bias and overfitting).
+
+## Inference
+
+```{r}
+reg1 <- lm(percentage_below_0.05 ~ log(log(num_n)), data_points)
+reg2 <- lm(percentage_below_0.05 ~ log(num_n), data_points)
+reg3 <- lm(percentage_below_0.05 ~ num_n, data_points)
+comb_regressions <- list(reg1, reg2, reg3)
+modelsummary(comb_regressions, fmt = 2)
+```
+
+So MSE goes down as we add more logs, but keep in mind that we are using the same data to test for and build this model, so we're bound to get some overfitting... This is where machine learning comes in as it takes a bunch of subsets to train and test, then averages their RMSE! Let's use k fold cross validation to fit the data.
+
+### Machine Learning: k-fold Cross Validation
+
+Let's try to use this technique in machine learning, which does the following to solve the issue of overfitting:
+
+1.  Data Splitting: The original dataset is randomly divided into five subsets of roughly equal size. Each subset is called a "fold."
+2.  Training and Testing: The modeling process is performed five times, each time using four folds (80% of the data) for training the model and the remaining one fold (20% of the data) for testing the model's performance.
+3.  Model Training: In each iteration, the model is trained on four folds, and the training data is used to fit the model and learn the underlying patterns in the data.
+4.  Model Evaluation: The model's performance is evaluated on the fifth fold (the test set) by calculating a performance metric, such as accuracy, precision, recall, or mean squared error, depending on the type of problem (classification or regression).
+5.  Performance Aggregation: After all five iterations are completed, the performance metrics from each fold are averaged to obtain a single performance estimate for the model.
+
+```{r}
+# Load required libraries
+library(caret)
+
+min_degree <- 1
+max_degree <- 11
+degrees <- min_degree:max_degree
+
+# Set up k-fold cross-validation
+k_fold_control <- trainControl(method = 'cv', number = 5)
+
+model_results <- vector("list", length = length(degrees))
+
+# Train the models using k-fold cross-validation for different polynomial degrees
+for (i in seq_along(degrees)) {
+  # Define the polynomial formula for the current degree
+  formula <- as.formula(paste("percentage_below_0.05 ~ poly(num_n,", degrees[i], ")"))
+  
+  # Train the model using the current formula
+  model_results[[i]] <- train(formula, data = data_points, method = "lm", trControl = k_fold_control)
+}
+
+# Print the cross-validated performance metrics
+rmse_values <- map_dbl(degrees, \(degrees) model_results[[degrees]]$results$RMSE)
+rmse_df <- data.frame(degree = degrees, RMSE = rmse_values)
+rmse_df |>
+  ggplot(aes(x = degree, y = RMSE)) +
+  geom_point() +
+  geom_line()
+```
+
+As you can see, as the degree of polynomial increases the RMSE decreases (reduction in bias), but after the 6th polynomial clearly the model starts overfitting the data such that the test set has high error. As there is not a massive difference between 2-7 degrees of polynomial, let's take the third polynomial in this case for simplicity visualize such a model
+
+```{r}
+data_points |>
+  ggplot(aes(y = percentage_below_0.05, x = final)) +
+  geom_point() +
+  geom_smooth(method = 'lm', formula = y ~ poly(x, 3), se = FALSE) +
+  labs(title = 'Simulation Results - Cutting Wood',
+       caption = '**simulated n cuts (n+1 wooden parts that add up to 1)') + 
+  xlab('Number of peices of wood') +
+  ylab('Probability that the shortest peice is below 0.05')
+```
+
+### Running 5 regressions to check
+
+Finally, let's compare the 5 regressions of using polynomials to fit the data from the 1st to the 5th degree. At this point I'm sorta tired and ready for bed, and the results don't match up with the CV results. Personally I trust CV better than something like adjusted R\^2 which relies on rules of thumb.
+
+```{r}
+cv_regression_5 <- lm(percentage_below_0.05 ~ final + I(final^2) + I(final^3) + I(final^4) + I(final^5), data_points)
+cv_regression_4 <- lm(percentage_below_0.05 ~ final + I(final^2) + I(final^3) + I(final^4), data_points)
+cv_regression_3 <- lm(percentage_below_0.05 ~ final + I(final^2) + I(final^3), data_points)
+cv_regression_2 <- lm(percentage_below_0.05 ~ final + I(final^2), data_points)
+cv_regression_1 <- lm(percentage_below_0.05 ~ final, data_points)
+comb_regressions_cv <- list(cv_regression_1, cv_regression_2, cv_regression_3, cv_regression_4, cv_regression_5)
+
+modelsummary(comb_regressions_cv, gof_omit = 'Log.Lik|AIC|BIC|F', fmt = 2, title = 'Regression results for the degree of polynomial', notes = "I'm personally getting confused here so let's call it a day")
+```
+
+# Conclusion:
+
+As I embark on this journey of programming I've been enjoying simulations the most. This has been really fun especially writing this
