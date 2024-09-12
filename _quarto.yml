@@ -11,6 +11,7 @@ website:
       - colonial_origins_ex.qmd
       - contaminated_wells_ex.qmd
       - filedraw_ex.qmd
+      - projects.qmd
       - football_markets_ex.qmd
       - optimal_stop_ex.qmd
       - Lumberjack.qmd
