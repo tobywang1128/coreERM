@@ -1,9 +1,9 @@
 ---
-title: "Excercise - Optimal Stopping"
+title: "Optimal Stopping"
 subtitle: "Core Empirical Research Methods - Summer Work"
 author: "Toby Wang"
 date: "Aug 4, 2023"
-format: pdf
+format: html
 geometry:
   - top=30mm
   - left=20mm

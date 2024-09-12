@@ -1,5 +1,5 @@
 ---
-title: "Lumberjack's Simulation"
+title: "Lumberjack's Simulation - Quant Trading Interview"
 subtitle: "A PPE student performing simulation studies to procrastinate"
 author: "Toby Wang"
 date: "Aug 1, 2023"
