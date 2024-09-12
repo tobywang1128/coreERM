@@ -155,4 +155,3 @@ ggplot(aes(x = Index, y = Value)) +
 ```
 
 Overall this time series plot centers around 0, has constant variance and at no point are the values persistently higher or lower than 0.
-
