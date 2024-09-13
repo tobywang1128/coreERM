@@ -10,19 +10,19 @@ website:
         text: Home
       - text: Articles
         menu:
-          - text: Colonial Origins
+          - text: Colonial Origins of Comparative Development
             href: colonial_origins_ex.qmd
-          - text: Contaminated Wells
+          - text: Finding Contaminated Wells in Bangladesh
             href: contaminated_wells_ex.qmd
-          - text: File Draw
+          - text: File Draw Bias within Academia
             href: filedraw_ex.qmd
-          - text: Projects
+          - text: Doing Monte Carlo on a Desert Island
             href: projects.qmd
-          - text: Football Markets
+          - text: Football Markets and the Efficient Market Hypothesis
             href: football_markets_ex.qmd
-          - text: Optimal Stop
+          - text: Optimal Stopping
             href: optimal_stop_ex.qmd
-          - text: Lumberjack
+          - text: The Lumberjack Quant Interview - a Simulation Apprach
             href: Lumberjack.qmd
     tools:
       - icon: twitter
