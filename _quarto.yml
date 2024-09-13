@@ -1,19 +1,29 @@
 project:
   type: website
   output-dir: docs
-  
+
 website:
   title: "Toby Wang's Personal Site"
   navbar:
     left:
       - href: index.qmd
         text: Home
-      - colonial_origins_ex.qmd
-      - contaminated_wells_ex.qmd
-      - filedraw_ex.qmd
-      - football_markets_ex.qmd
-      - optimal_stop_ex.qmd
-      - Lumberjack.qmd
+      - text: Articles
+        menu:
+          - text: Colonial Origins
+            href: colonial_origins_ex.qmd
+          - text: Contaminated Wells
+            href: contaminated_wells_ex.qmd
+          - text: File Draw
+            href: filedraw_ex.qmd
+          - text: Projects
+            href: projects.qmd
+          - text: Football Markets
+            href: football_markets_ex.qmd
+          - text: Optimal Stop
+            href: optimal_stop_ex.qmd
+          - text: Lumberjack
+            href: Lumberjack.qmd
     tools:
       - icon: twitter
         href: https://twitter.com/
@@ -29,4 +39,3 @@ format:
     toc: true
 
 editor: source
-
