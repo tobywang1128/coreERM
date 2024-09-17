@@ -3,12 +3,12 @@ project:
   output-dir: docs
 
 website:
-  title: "Toby Wang's Personal Site"
+  title: "Toby Wang"
   navbar:
     left:
       - href: index.qmd
         text: Home
-      - text: Articles
+      - text: Data Projects (Economtrics)
         menu:
           - text: Colonial Origins of Comparative Development
             href: colonial_origins_ex.qmd
@@ -20,10 +20,24 @@ website:
             href: projects.qmd
           - text: Football Markets and the Efficient Market Hypothesis
             href: football_markets_ex.qmd
-          - text: Optimal Stopping
-            href: optimal_stop_ex.qmd
           - text: The Lumberjack Quant Interview - a Simulation Apprach
             href: Lumberjack.qmd
+          - text: Optimal Stopping
+            href: optimal_stop_ex.qmd
+      - text: Data Projects (Finance)
+        menu:
+          - text: Under Construction
+      - text: Other Writing
+        menu:
+          - text: Redefining Privilege
+            href: oasis_priv.qmd
+          - text: Holding our Identity Lightly
+            href: oasis_id.qmd
+          - text: The Last Generation of Beijingers
+            href: https://mp.weixin.qq.com/s/yway7VRo7AG3FVNXL6cs5g
+          - text: Oxford - Dissertation 
+            href: https://pdflink.to/oxfordtobydiss/
+          - text: Oxford - Econometrics
     tools:
       - icon: twitter
         href: https://twitter.com/
